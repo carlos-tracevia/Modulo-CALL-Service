@@ -1,0 +1,58 @@
+services:
+  asterisk:
+    build:
+      context: ./asterisk
+      dockerfile: Dockerfile
+    image: docker-asterisk
+    container_name: asterisk
+    network_mode: "host"
+    restart: unless-stopped
+
+    environment:
+      TZ: America/Sao_Paulo
+
+    volumes:
+      - ./asterisk/config/pjsip.conf:/etc/asterisk/pjsip.conf:rw
+      - ./asterisk/config/extensions.conf:/etc/asterisk/extensions.conf:rw
+      - ./asterisk/config/rtp.conf:/etc/asterisk/rtp.conf:rw
+      - ./asterisk/config/asterisk.conf:/etc/asterisk/asterisk.conf:rw
+      - ./asterisk/config/modules.conf:/etc/asterisk/modules.conf:rw
+      - ./asterisk/config/logger.conf:/etc/asterisk/logger.conf:rw
+      - ./asterisk/config/http.conf:/etc/asterisk/http.conf:rw
+
+      - ./asterisk/keys/:/etc/asterisk/keys/:ro
+
+      - asterisk-data:/var/lib/asterisk
+      - asterisk-logs:/var/log/asterisk
+
+      - ./asterisk/records:/var/spool/asterisk/monitor
+
+    healthcheck:
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime' >/dev/null 2>&1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+
+  transcriber:
+    build:
+      context: ./transcriber
+      dockerfile: Dockerfile
+    image: docker-transcriber
+    container_name: transcriber
+    restart: unless-stopped
+
+    environment:
+      TZ: America/Sao_Paulo
+      RECORDS_DIR: /records
+      WHISPER_MODEL: base
+      WHISPER_LANGUAGE: pt
+
+    volumes:
+      - ./asterisk/records:/records
+
+    depends_on:
+      - asterisk
+
+volumes:
+  asterisk-data:
+  asterisk-logs:
