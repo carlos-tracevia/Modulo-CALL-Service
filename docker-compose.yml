@@ -19,12 +19,10 @@ services:
       - ./asterisk/config/modules.conf:/etc/asterisk/modules.conf:rw
       - ./asterisk/config/logger.conf:/etc/asterisk/logger.conf:rw
       - ./asterisk/config/http.conf:/etc/asterisk/http.conf:rw
-
+      - ./asterisk/scripts:/opt/asterisk/scripts:ro
       - ./asterisk/keys/:/etc/asterisk/keys/:ro
-
       - asterisk-data:/var/lib/asterisk
       - asterisk-logs:/var/log/asterisk
-
       - ./asterisk/records:/var/spool/asterisk/monitor
 
     healthcheck:
@@ -44,8 +42,15 @@ services:
     environment:
       TZ: America/Sao_Paulo
       RECORDS_DIR: /records
-      WHISPER_MODEL: base
+      WHISPER_MODEL: large-v3
       WHISPER_LANGUAGE: pt
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      CALL_BACKEND_UPLOAD_URL: http://192.168.0.36:8789/api/call/recordings
+      GATEWAY_SECRET: 72c9e06fb13682bb94b025a9f8053a7874acf532
+      KEEP_LOCAL_FILES: "false"
+      UPLOAD_TIMEOUT_SECONDS: "120"
+      TRANSCRIBE_MIXED_AUDIO: "false"
 
     volumes:
       - ./asterisk/records:/records
