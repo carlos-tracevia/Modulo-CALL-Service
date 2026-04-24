@@ -42,11 +42,13 @@ services:
     environment:
       TZ: America/Sao_Paulo
       RECORDS_DIR: /records
-      WHISPER_MODEL: large-v3
+      WHISPER_MODEL: medium
       WHISPER_LANGUAGE: pt
       WHISPER_DEVICE: cpu
       WHISPER_COMPUTE_TYPE: int8
-      CALL_BACKEND_UPLOAD_URL: http://192.168.0.36:8789/api/call/recordings
+      WHISPER_CPU_THREADS: "4"
+      WHISPER_NUM_WORKERS: "2"
+      CALL_BACKEND_UPLOAD_URL: http://192.168.0.55:8789/api/call/recordings
       GATEWAY_SECRET: 72c9e06fb13682bb94b025a9f8053a7874acf532
       KEEP_LOCAL_FILES: "false"
       UPLOAD_TIMEOUT_SECONDS: "120"

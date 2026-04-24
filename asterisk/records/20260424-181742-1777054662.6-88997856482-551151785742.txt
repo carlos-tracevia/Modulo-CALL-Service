@@ -1,0 +1,12 @@
+TRANSCRIÇÃO DA CHAMADA
+
+ID DA CHAMADA: 1777054662.6
+LIGADOR: 88997856482
+DESTINO: 551151785742
+DURAÇÃO: 01:07
+
+=== LIGADOR ===
+Demonstração do módulo call com transcrição para arquivo TXT. Nesse momento são 15 e 17 minutos da tarde do dia 24 de abril de 2026. O protocolo dessa chamada é o 1777054662.6. Agora eu vou simular um ligador fazendo uma solicitação de uma ambulância para uma determinada quilometragem em uma rodovia simulada. Bom dia, eu acabei de sofrer um acidente na rodovia Tracevia no quilômetro 36 e gostaria de solicitar um atendimento para a minha pessoa, pois estou impossibilitado de me locomover até o hospital mais próximo, como também um guincho para fazer o resgate do meu carro, já que ele está quebrado.
+
+=== ATENDENTE ===
+[sem fala do atendente]

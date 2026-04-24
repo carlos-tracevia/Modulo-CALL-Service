@@ -1,0 +1,12 @@
+TRANSCRIÇÃO DA CHAMADA
+
+ID DA CHAMADA: 1777051337.0
+LIGADOR: 88997856482
+DESTINO: 551151785742
+DURAÇÃO: 01:08
+
+=== LIGADOR ===
+Expeção módulo SAC, call, expressão para arquivo texto no formato texto. Hoje é dia 24 de abril de 2026. O número do telefone é 8897856482. O protocolo dessa ligação é 1777051337.0. vou simular uma chamada telefônica de uma pessoa que ficou sofreu um acidente em uma rodovia chamada Tracevia. Onde eu estou ligando porque acabei de sofrer um acidente na rodovia Tracevia, um quilômetro 16 e preciso solicitar um ambulância o mais rápido possível para me resgatar e fazer minha locomoção até o hospital, pois no carro se encontra se a gente está do distrito total não consigo movimentar nesse momento.
+
+=== ATENDENTE ===
+Contexto de módulo com Asterisk, NVOIP e ramais.

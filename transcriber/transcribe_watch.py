@@ -2,6 +2,7 @@ import os
 import time
 import subprocess
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from faster_whisper import WhisperModel
@@ -9,14 +10,16 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 RECORDS_DIR = Path(os.getenv("RECORDS_DIR", "/records"))
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "large-v3")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
 LANGUAGE = os.getenv("WHISPER_LANGUAGE", "pt")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+WHISPER_CPU_THREADS = int(os.getenv("WHISPER_CPU_THREADS", "4"))
+WHISPER_NUM_WORKERS = int(os.getenv("WHISPER_NUM_WORKERS", "2"))
 
 CALL_BACKEND_UPLOAD_URL = os.getenv(
     "CALL_BACKEND_UPLOAD_URL",
-    "http://192.168.0.36:8789/api/call/recordings",
+    "http://192.168.0.55:8789/api/call/recordings",
 )
 GATEWAY_SECRET = os.getenv("GATEWAY_SECRET", "")
 
@@ -28,6 +31,8 @@ model = WhisperModel(
     WHISPER_MODEL,
     device=DEVICE,
     compute_type=COMPUTE_TYPE,
+    cpu_threads=WHISPER_CPU_THREADS,
+    num_workers=WHISPER_NUM_WORKERS,
 )
 
 
@@ -49,11 +54,18 @@ def run_cmd(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
 
 
 def wait_for_file(path: Path, timeout: int = 10) -> bool:
+    last_size = -1
+
     for _ in range(timeout):
-        if path.exists() and path.stat().st_size > 0:
-            return True
+        if path.exists():
+            size = path.stat().st_size
+            if size > 0 and size == last_size:
+                return True
+            last_size = size
+
         time.sleep(1)
-    return False
+
+    return path.exists() and path.stat().st_size > 0
 
 
 def normalize_wav(input_path: Path) -> Path:
@@ -64,24 +76,19 @@ def normalize_wav(input_path: Path) -> Path:
     cmd = [
         "ffmpeg",
         "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
         "-i",
         str(input_path),
         "-ac",
         "1",
         "-ar",
         "16000",
-        "-af",
-        "highpass=f=120,lowpass=f=3400,afftdn=nf=-20",
         str(normalized_path),
     ]
 
-    result = run_cmd(cmd)
-
-    if result.stdout.strip():
-        print(result.stdout.strip())
-    if result.stderr.strip():
-        print(result.stderr.strip())
-
+    run_cmd(cmd)
     return normalized_path
 
 
@@ -110,26 +117,24 @@ def transcribe_file(input_path: Path) -> str:
         str(input_path),
         language=LANGUAGE,
         task="transcribe",
-        beam_size=5,
-        patience=1.0,
-        repetition_penalty=1.05,
-        no_repeat_ngram_size=3,
+        beam_size=1,
+        best_of=1,
         temperature=0.0,
         vad_filter=True,
         vad_parameters={
-            "min_silence_duration_ms": 700,
-            "speech_pad_ms": 250,
+            "min_silence_duration_ms": 500,
+            "speech_pad_ms": 150,
         },
         condition_on_previous_text=False,
         initial_prompt=(
             "Transcrição de ligação telefônica em português do Brasil. "
             "Contexto: sistema de telefonia com Asterisk, NVOIP e ramais. "
-            "Corrigir nomes para: Tracevia, NVOIP, Asterisk, módulo call, atendimento. "
-            "Evitar repetições e palavras sem sentido."
+            "Corrigir nomes para: Tracevia, NVOIP, Asterisk, módulo call, atendimento."
         ),
     )
 
     parts = []
+
     for segment in segments:
         txt = segment.text.strip()
         if txt:
@@ -176,7 +181,6 @@ def transcribe_single_audio(audio_path: Path) -> tuple[str, Path | None]:
         return "", normalized_path
 
     text = transcribe_file(normalized_path)
-    print(f"[INFO] WAV normalizado mantido para análise temporária: {normalized_path.name}")
     return text, normalized_path
 
 
@@ -234,12 +238,6 @@ def parse_call_metadata_from_filename(base_wav: Path) -> dict:
     destination = parts[4]
     extension = None
 
-    print("[DEBUG] Metadata extraído:")
-    print(f"        callUniqueId={call_unique_id}")
-    print(f"        caller={caller}")
-    print(f"        destination={destination}")
-    print(f"        extension={extension}")
-
     return {
         "callUniqueId": call_unique_id,
         "caller": caller,
@@ -277,8 +275,6 @@ def upload_to_call_backend(
     if extension is not None:
         payload["extension"] = str(extension)
 
-    print(f"[DEBUG] Payload upload: {payload}")
-
     try:
         with open(mp3_path, "rb") as audio_file, open(txt_path, "rb") as transcript_file:
             response = requests.post(
@@ -310,7 +306,7 @@ def upload_to_call_backend(
 
 
 def process_call(base_wav: Path, ready_path: Path | None = None):
-    time.sleep(2)
+    time.sleep(1)
 
     if not base_wav.exists():
         print(f"[WARN] WAV base não encontrado: {base_wav.name}")
@@ -333,10 +329,13 @@ def process_call(base_wav: Path, ready_path: Path | None = None):
     mp3_path = base_wav.with_suffix(".mp3")
 
     wait_for_file(base_wav, 10)
+
     if rx_wav.exists():
         wait_for_file(rx_wav, 10)
+
     if tx_wav.exists():
         wait_for_file(tx_wav, 10)
+
     if mp3_path.exists():
         wait_for_file(mp3_path, 10)
 
@@ -354,15 +353,27 @@ def process_call(base_wav: Path, ready_path: Path | None = None):
         extension = metadata["extension"]
 
         mixed_text = ""
+
         if TRANSCRIBE_MIXED_AUDIO:
             mixed_text, mixed_normalized = transcribe_single_audio(base_wav)
 
-        ligador_text, rx_normalized = (
-            transcribe_single_audio(rx_wav) if rx_wav.exists() else ("", None)
-        )
-        atendente_text, tx_normalized = (
-            transcribe_single_audio(tx_wav) if tx_wav.exists() else ("", None)
-        )
+        ligador_text = ""
+        atendente_text = ""
+
+        tasks = {}
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            if rx_wav.exists():
+                tasks["ligador"] = executor.submit(transcribe_single_audio, rx_wav)
+
+            if tx_wav.exists():
+                tasks["atendente"] = executor.submit(transcribe_single_audio, tx_wav)
+
+            if "ligador" in tasks:
+                ligador_text, rx_normalized = tasks["ligador"].result()
+
+            if "atendente" in tasks:
+                atendente_text, tx_normalized = tasks["atendente"].result()
 
         duration_seconds = get_audio_duration_seconds(mp3_path if mp3_path.exists() else base_wav)
         duration_formatted = format_duration(duration_seconds)
@@ -444,6 +455,8 @@ if __name__ == "__main__":
     print(f"[INIT] Idioma: {LANGUAGE}")
     print(f"[INIT] Device: {DEVICE}")
     print(f"[INIT] Compute type: {COMPUTE_TYPE}")
+    print(f"[INIT] CPU threads: {WHISPER_CPU_THREADS}")
+    print(f"[INIT] Num workers: {WHISPER_NUM_WORKERS}")
     print(f"[INIT] Upload backend URL: {CALL_BACKEND_UPLOAD_URL}")
     print(f"[INIT] KEEP_LOCAL_FILES: {KEEP_LOCAL_FILES}")
     print(f"[INIT] TRANSCRIBE_MIXED_AUDIO: {TRANSCRIBE_MIXED_AUDIO}")
